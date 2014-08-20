@@ -1,0 +1,5 @@
+SystemTap script generator
+--------------------------
+
+Usage:
+  bash insert_probe.sh [-v] -r <recipe_file>
