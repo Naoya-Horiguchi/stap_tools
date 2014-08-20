@@ -1,0 +1,25 @@
+# SIMPLE: # hugetlb_fault 3
+## SIMPLE: do_migrate_pages
+## SIMPLE: migrate_vmas
+## SIMPLE: migrate_to_node
+## SIMPLE: queue_pages_range
+# SIMPLE: migrate_pages
+# SIMPLE: new_node_page 1
+# SIMPLE: try_to_unmap 1
+# SIMPLE: move_to_new_page 1 2
+# SIMPLE: hugetlb_cgroup_migrate 1 2
+
+cat <<EOF
+
+probe kernel.function("unmap_and_move_huge_page") {
+      $PBHDR;
+      page = arg4();
+      page_dump(page);
+}
+
+probe kernel.function("unmap_and_move_huge_page").return {
+      $PBHDR;
+      printf(" return %lx\n", returnval());      
+}
+
+EOF

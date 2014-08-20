@@ -1,0 +1,15 @@
+function dcount:long (val:long) %{
+    struct dentry *de = ((struct dentry *)STAP_ARG_val);
+    if (de)
+        STAP_RETVALUE = (unsigned long)de->d_lockref.count;
+    else
+        STAP_RETVALUE = (unsigned long)0;
+%}
+
+function path_dentry:long (val:long) %{
+    struct path *path = ((struct path *)STAP_ARG_val);
+    if (path)
+        STAP_RETVALUE = (unsigned long)path->dentry;
+    else
+        STAP_RETVALUE = (unsigned long)0;
+%}

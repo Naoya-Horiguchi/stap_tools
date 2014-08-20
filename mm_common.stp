@@ -1,0 +1,103 @@
+function pfn_to_page:long (val:long) %{
+    STAP_RETVALUE = (long)pfn_to_page((unsigned long)STAP_ARG_val);
+%}
+
+function page_to_pfn:long (val:long) %{
+    STAP_RETVALUE = (long)page_to_pfn((struct page *)STAP_ARG_val);
+%}
+
+function page_count:long (val:long) %{
+    STAP_RETVALUE = (long)page_count((struct page *)STAP_ARG_val);
+%}
+
+function page_mapcount:long (val:long) %{
+    STAP_RETVALUE = (long)page_mapcount((struct page *)STAP_ARG_val);
+%}
+
+function page_dump (page:long) %{
+  struct page *page = (struct page *)STAP_ARG_page;
+  _stp_printf("%lx/%lx %lx/%lx, %lx\n", page, page_to_pfn(page),
+              page_count(page), page_mapcount(page), page->flags);
+%}
+
+function ptr_deref:long (val:long) %{
+    STAP_RETVALUE = (long)*(char *)STAP_ARG_val;
+%}
+
+function show_pgdats () %{
+    struct pglist_data *pgdat;
+    int nid = 3;
+    int i, n = 0;
+    unsigned long start, end;
+    unsigned long pfn, sec_begin;
+    struct mem_section *memsec;
+    struct memory_block *memblk;
+
+    for_each_online_pgdat(pgdat) {
+        printk("pgdat:%p\n", pgdat);
+        printk("  id:%d\n", pgdat->node_id);
+        printk("  start:%lx\n", pgdat->node_start_pfn);
+        printk("  present:%lx\n", pgdat->node_present_pages);
+        printk("  scanned:%lx\n", pgdat->node_spanned_pages);
+        continue;
+        pfn = pgdat->node_start_pfn;
+        end = pgdat_end_pfn(pgdat);
+        for (; pfn < end; pfn += PAGES_PER_SECTION) {
+            if (present_section_nr(pfn_to_section_nr(pfn))) {
+                memsec = __nr_to_section(pfn_to_section_nr(pfn));
+                memblk = find_memory_block(memsec);
+                printk(" sec %ld, offline %d\n", pfn_to_section_nr(pfn), is_memblock_offlined(memblk));
+            }
+        }
+    }
+%}
+
+function show_pgtable (mm:long, index:long) %{
+    struct mm_struct *mm = (struct mm_struct *)STAP_ARG_mm;
+    unsigned long index = (unsigned long)STAP_ARG_index;
+    unsigned long addr = 0x700000000000UL + 0x200000 * index;
+    pgd_t *pgd;
+    pud_t *pud;
+    pmd_t *pmd = NULL;
+    pte_t *pte, entry;
+    struct page *page;
+
+    if (!mm) goto out3;
+    pgd = pgd_offset(mm, addr);
+    if (!pgd) goto out3;
+    /* _stp_printf("pgd:%lx/%lx ", pgd, *pgd); */
+    pud = pud_offset(pgd, addr);
+    if (!pud) goto out3;
+    /* _stp_printf("pud:%lx/%lx ", pud, *pud); */
+    pmd = pmd_offset(pud, addr);
+    if (0xffffc70000000000 < (unsigned long)pmd) goto out3;
+    if (!pmd) goto out3;
+    /* _stp_printf("pmd:%lx/%lx ", pmd, *pmd); */
+    page = pmd_page(*pmd);
+    _stp_printf("pmd_page:%lx/%lx/%lx/%lx ", page_to_pfn(page), page_count(page), *pmd, index);
+
+    pte = pte_offset_map(pmd, addr);
+    _stp_printf("pte:%lx ", *pte);
+
+out3:
+    _stp_printf("\n");
+%}
+
+function pud_to_pmd (mm:long, pud:long, addr:long) %{
+    struct mm_struct *mm = (struct mm_struct *)STAP_ARG_mm;
+    pud_t *pud = (pud_t *)STAP_ARG_pud;
+    pmd_t *pmd = NULL;
+    struct page *page;
+    unsigned long addr = (unsigned long)STAP_ARG_addr;
+
+    if (!pud) goto out3;
+    _stp_printf("pud:%lx/%lx ", pud, *pud);
+    pmd = pmd_offset(pud, addr);
+    if (!pmd) goto out3;
+    _stp_printf("pmd:%lx/%lx ", pmd, *pmd);
+    page = pmd_page(*pmd);
+    _stp_printf("pmd_page:%lx/%lx/%lx ", page_to_pfn(page), page_count(page), page);
+
+out3:
+    _stp_printf("\n");
+%}

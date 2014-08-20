@@ -1,0 +1,184 @@
+# # SIMPLE: handle_mm_fault 1
+# SIMPLE: # __do_page_fault
+# SIMPLE: # __unmap_hugepage_range
+# SIMPLE: # migration_entry_wait_huge
+# SIMPLE: # hugetlb_fault 3
+# SIMPLE: # hugetlb_cow 3 5
+# SIMPLE: # hugetlb_no_page 5
+# SIMPLE: # hugetlbfs_pagecache_page
+# SIMPLE: # do_munmap
+# SIMPLE: # unmap_vmas
+# SIMPLE: # free_pgtables
+# SIMPLE: # is_hugetlb_entry_migration
+# SIMPLE: # alloc_huge_page
+# SIMPLE: # pagecache_get_page 3
+
+cat <<EOF
+
+global target;
+global gptep;
+global af_count;
+global gpage;
+global gmapping;
+
+probe begin {
+    target = 0;
+    af_count = 0;
+    gpage = 0;
+    gmapping = 0;
+    printf("----------- start \n");
+    printf("--- free:%lx, active:%lx \n", get_nr_free_hugepages($HSTATES_ADDR), get_nr_active_hugepages($HSTATES_ADDR));
+
+#     show_free_hugepages(0);
+#     show_active_hugepages(0);
+#     exit();
+}
+
+probe kernel.function("hugetlb_fault") {
+    $PBHDR;
+    mm = arg1();
+    addr = arg3();
+    gptep = huge_pte_offset(mm, addr);
+    gmapping = file_mapping(vma_file(arg2()));
+    if (gpage > 0xffffea0000000000 && gpage < 0xffffff0000000000) {
+        printf(" %lx %lx/%lx %lx %lx\n", addr,
+            page_count(gpage), page_mapcount(gpage),
+            page_mapping(gpage), page_flag(gpage));
+    } else {
+        printf(" %lx\n", addr);
+    }
+}
+
+probe kernel.function("hugetlb_fault").return {
+    $PBHDR;
+    if (gpage > 0xffffea0000000000 && gpage < 0xffffff0000000000) {
+        printf(" return %lx %lx/%lx %lx %lx\n", returnval(),
+            page_count(gpage), page_mapcount(gpage),
+            page_mapping(gpage), page_flag(gpage));
+    } else {
+        printf(" %lx\n", returnval());
+    }
+}
+
+probe kernel.function("pagecache_get_page") {
+    if (arg1() == gmapping && 
+        gpage > 0xffffea0000000000 && gpage < 0xffffff0000000000) {
+        $PBHDR;
+        printf(" %lx %lx\n", page_count(gpage), page_flag(gpage));
+    }
+}
+
+# probe kernel.function("pagecache_get_page").return {
+#     if (arg1() == gmapping) {
+#         $PBHDR;
+#         printf(" return %lx\n", returnval());
+#     }
+# }
+
+probe kernel.function("hugetlb_no_page") {
+    $PBHDR;
+    if (gpage > 0xffffea0000000000 && gpage < 0xffffff0000000000) {
+        printf(" %lx %lx %lx/%lx %lx %lx\n", arg5(), arg6(),
+            page_count(gpage), page_mapcount(gpage),
+            page_mapping(gpage), page_flag(gpage));
+    } else {
+        printf(" %lx\n", arg5());
+    }
+}
+
+probe kernel.function("hugetlb_no_page").return {
+    $PBHDR;
+    if (gpage > 0xffffea0000000000 && gpage < 0xffffff0000000000) {
+        printf(" return %lx %lx/%lx %lx %lx\n", returnval(),
+            page_count(gpage), page_mapcount(gpage),
+            page_mapping(gpage), page_flag(gpage));
+    } else {
+        printf(" %lx\n", returnval());
+    }
+}
+
+probe kernel.function("hugetlb_cow") {
+    pte = arg5();
+    pfn = (pte >> 12) & 0xfffffff;
+    gpage = pfn_to_page(pfn);
+    pcpage = arg6();
+    $PBHDR;
+    printf(" %lx %lx %lx, %lx/%lx %lx %lx\n", arg3(), pfn, pcpage,
+        page_count(gpage), page_mapcount(gpage),
+        page_mapping(gpage), page_flag(gpage));
+}
+
+probe kernel.function("hugetlb_cow").return {
+    $PBHDR;
+    printf(" return %lx %lx/%lx %lx %lx\n", returnval(),
+        page_count(gpage), page_mapcount(gpage),
+        page_mapping(gpage), page_flag(gpage));
+}
+
+probe kernel.function("alloc_huge_page").return {
+    $PBHDR;
+    page = returnval();
+    if (page > 0xffffea0000000000 && page < 0xffffff0000000000) {
+        af_count += 1;
+        printf(" return %lx, %lx\n", page, page_to_pfn(page));
+    } else {
+        printf(" return %lx\n", page);
+    }
+}
+
+probe kernel.function("pagecache_get_page").return {
+#     $PBHDR;
+    page = returnval();
+    if (page > 0) {
+        af_count += 1;
+#         printf(" return %lx, %lx\n", page, page_to_pfn(page));
+#     } else {
+#         printf(" return %lx\n", page);
+    }
+}
+
+# probe kernel.function("hugepage_add_new_anon_rmap") {
+#     $PBHDR;
+#     page = arg1();
+#     addr = arg3();
+#     printf(" %lx, %lx, %lx\n", page_to_pfn(page), page_count(page), addr);
+# }
+# 
+# probe kernel.function("hugepage_add_new_anon_rmap").return {
+#     $PBHDR;
+#     printf(" return %lx\n", returnval());
+# }
+
+probe kernel.function("page_move_anon_rmap") {
+    vma = arg2();
+    if (vma_flag & 0x00400000) {
+        page = arg1();
+        $PBHDR;
+        printf(" %lx, %lx\n", page_to_pfn(page), page_count(page));
+    }
+}
+
+probe kernel.function("hugetlbfs_pagecache_page") {
+    $PBHDR;
+    if (gpage > 0xffffea0000000000 && gpage < 0xffffff0000000000) {
+        printf(" %lx %lx/%lx %lx %lx\n", arg3(),
+            page_count(gpage), page_mapcount(gpage),
+            page_mapping(gpage), page_flag(gpage));
+    } else {
+        printf(" %lx\n", arg3());
+    }
+}
+
+probe kernel.function("free_huge_page") {
+    $PBHDR;
+    page = arg1();
+    af_count -= 1;
+    printf(" %lx, %lx, %lx\n", page_to_pfn(page), page_count(page), af_count);
+    if (target == 0) {
+        target = page_to_pfn(page);
+    } else if (target != page_to_pfn(page)) {
+        printf("target hugepage changed!\n");
+        exit();
+    }
+}
+EOF

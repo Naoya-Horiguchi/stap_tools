@@ -1,0 +1,89 @@
+function get_huge_entry:long (mm:long, addr:long) %{
+  struct mm_struct *mm = (struct mm_struct *)STAP_ARG_mm;
+  unsigned long address = (unsigned long)STAP_ARG_addr;
+  pte_t *ptep = huge_pte_offset(mm, address);
+  pte_t entry = huge_ptep_get(ptep);
+  _stp_printf("mm %p, addr %lx, %d, %d\n", mm, address, entry, huge_pte_none(entry));
+  if (!huge_pte_none(entry)) {
+    struct page *page = pte_page(entry);
+    _stp_printf("%p, %lx, %lx, %d/%d\n",
+                page, page_to_pfn(page), page->flags, page_count(page), page_mapcount(page));
+  }
+%}
+
+%{
+struct page *hfpage[4096];
+struct page *hapage[4096];
+int nr_free_huge;
+int nr_active_huge;
+%}
+
+function get_nr_free_hugepages (addr:long) %{
+  struct hstate *hs = (struct hstate *)STAP_ARG_addr;
+  struct page *page;
+  struct page *tmp;
+  int i, j = 0;
+
+  for (i = 0; i < MAX_NUMNODES; i++) {
+    list_for_each_entry_safe(page, tmp, &hs->hugepage_freelists[i], lru) {
+      /* _stp_printf("%lx %lx\n", page, page_to_pfn(page)); */
+      hfpage[j++] = page;
+    }
+  }
+  nr_free_huge = j;
+  STAP_RETVALUE = (long)j;
+%}
+
+function get_nr_active_hugepages (addr:long) %{
+  struct hstate *hs = (struct hstate *)STAP_ARG_addr;
+  struct page *page;
+  struct page *tmp;
+  int i, j = 0;
+
+  list_for_each_entry_safe(page, tmp, &hs->hugepage_activelist, lru) {
+    /* _stp_printf("%lx %lx\n", page, page_to_pfn(page)); */
+    hapage[j++] = page;
+  }
+  nr_active_huge = j;
+  STAP_RETVALUE = (long)j;
+%}
+
+function show_free_hugepages (nr:long) %{
+  struct page *page;
+  int i;
+
+  _stp_printf("Free Hugepages:\n");
+  for (i = 0; i < nr_free_huge; i++) {
+    page = hfpage[i];
+    _stp_printf(" %8lx:%lx:%lx\t%p:%p:%p\n", page_to_pfn(page), page_count(page), page->flags, page, page->lru.prev, page->lru.next);
+  }
+%}
+
+function show_active_hugepages (nr:long) %{
+  struct page *page;
+  int i;
+
+  _stp_printf("Active Hugepages:\n");
+  for (i = 0; i < nr_active_huge; i++) {
+    page = hapage[i];
+    _stp_printf(" %8lx:%lx:%lx\t%p:%p:%p\n", page_to_pfn(page), page_count(page), page->flags, page, page->lru.prev, page->lru.next);
+  }
+%}
+
+function show_all_hugepages (nr:long) %{
+  struct page *page;
+  int i;
+
+  _stp_printf("HPS:");
+  for (i = 0; i < nr_huge; i++) {
+    page = hhpage[i];
+    if (page_count(page))
+      _stp_printf(" %lx:%lx", page_to_pfn(page), page_count(page));
+  }
+%}
+
+function huge_pte_offset:long (mm:long, addr:long) %{
+  struct mm_struct *mm = (struct mm_struct *)STAP_ARG_mm;
+  unsigned long addr = (unsigned long)STAP_ARG_addr;
+  STAP_RETVALUE = (long)huge_pte_offset(mm, addr);
+%}

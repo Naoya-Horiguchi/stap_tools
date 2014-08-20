@@ -1,0 +1,12 @@
+# SIMPLE: # hugetlb_fault 3
+
+cat <<EOF
+
+probe begin {
+    printf("--- free:%lx, active:%lx \n", get_nr_free_hugepages($HSTATES_ADDR), get_nr_active_hugepages($HSTATES_ADDR));
+
+    show_free_hugepages(0);
+    show_active_hugepages(0);
+    exit();
+}
+EOF

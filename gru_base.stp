@@ -1,0 +1,92 @@
+%{
+#include <linux/kernel.h>
+#include <linux/mm.h>
+#include <linux/fs.h>
+#include <linux/hugetlb.h>
+#include <linux/mmzone.h>
+#include <linux/pageblock-flags.h>
+#include <linux/memory.h>
+#include <linux/path.h>
+#include <linux/dcache.h>
+#include <linux/blk_types.h>
+#include <linux/memblock.h>
+#include <linux/bootmem.h>
+#include <linux/mmzone.h>
+#include "../../../arch/x86/include/asm/pgtable.h"
+
+unsigned long __call_kernel_func1(unsigned long func, unsigned long arg1)
+{
+        char *(*f)(unsigned long) = (char *(*)(unsigned long))func;
+        return (unsigned long)f(arg1);
+}
+unsigned long __call_kernel_func2(unsigned long func, unsigned long arg1, unsigned long arg2)
+{
+        char *(*f)(unsigned long, unsigned long) = (char *(*)(unsigned long, unsigned long))func;
+        return (unsigned long)f(arg1, arg2);
+}
+unsigned long __call_kernel_func3(unsigned long func, unsigned long arg1, unsigned long arg2, unsigned long arg3)
+{
+        char *(*f)(unsigned long, unsigned long, unsigned long) = (char *(*)(unsigned long, unsigned long, unsigned long))func;
+        return (unsigned long)f(arg1, arg2, arg3);
+}
+unsigned long __call_kernel_func4(unsigned long func, unsigned long arg1, unsigned long arg2, unsigned long arg3, unsigned long arg4)
+{
+        char *(*f)(unsigned long, unsigned long, unsigned long, unsigned long) = (char *(*)(unsigned long, unsigned long, unsigned long, unsigned long))func;
+        return (unsigned long)f(arg1, arg2, arg3, arg4);
+}
+unsigned long __call_kernel_func5(unsigned long func, unsigned long arg1, unsigned long arg2, unsigned long arg3, unsigned long arg4, unsigned long arg5)
+{
+        char *(*f)(unsigned long, unsigned long, unsigned long, unsigned long, unsigned long) = (char *(*)(unsigned long, unsigned long, unsigned long, unsigned long, unsigned long))func;
+        return (unsigned long)f(arg1, arg2, arg3, arg4, arg5);
+}
+unsigned long __call_kernel_func6(unsigned long func, unsigned long arg1, unsigned long arg2, unsigned long arg3, unsigned long arg4, unsigned long arg5, unsigned long arg6)
+{
+        char *(*f)(unsigned long, unsigned long, unsigned long, unsigned long, unsigned long, unsigned long) = (char *(*)(unsigned long, unsigned long, unsigned long, unsigned long, unsigned long, unsigned long))func;
+        return (unsigned long)f(arg1, arg2, arg3, arg4, arg5, arg6);
+}
+
+int pud_huge(pud_t pud)
+{
+        return !!(pud_val(pud) & _PAGE_PSE);
+}
+
+pte_t *huge_pte_offset(struct mm_struct *mm, unsigned long addr)
+{
+        pgd_t *pgd;
+        pud_t *pud;
+        pmd_t *pmd = NULL;
+
+        pgd = pgd_offset(mm, addr);
+        if (pgd_present(*pgd)) {
+                pud = pud_offset(pgd, addr);
+                if (pud_present(*pud)) {
+                        if (pud_huge(*pud))
+                                return (pte_t *)pud;
+                        pmd = pmd_offset(pud, addr);
+                }
+        }
+        return (pte_t *) pmd;
+}
+
+struct page_to_node {
+        unsigned long addr;
+        struct page *page;
+        int node;
+        int status;
+};
+
+struct pglist_data *first_online_pgdat(void)
+{
+  return NODE_DATA(first_online_node);
+}
+
+struct pglist_data *next_online_pgdat(struct pglist_data *pgdat)
+{
+  int nid = next_online_node(pgdat->node_id);             
+
+  if (nid == MAX_NUMNODES)
+    return NULL;
+  return NODE_DATA(nid);
+}
+
+%}

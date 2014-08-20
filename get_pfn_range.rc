@@ -1,0 +1,52 @@
+# SIMPLE: # hugetlb_fault 3
+
+FIND_MEMORY_BLOCK_ADDR=0x$(getsymaddr find_memory_block)
+IS_MEMORY_OFFLINED_ADDR=0x$(getsymaddr is_memblock_offlined)
+
+cat <<EOF
+
+%{
+
+#include <linux/memblock.h>
+
+struct memory_block *(*my_find_memory_block)(struct mem_section *section) = (struct memory_block *(*)(struct mem_section *section))$FIND_MEMORY_BLOCK_ADDR;
+bool (*my_is_memblock_offlined)(struct memory_block *mem) = (bool (*)(struct memory_block *mem))$IS_MEMORY_OFFLINED_ADDR;
+
+static bool valid_mem_section(unsigned long sec_nr)
+{
+       struct memory_block *memblk;
+       if (!present_section_nr(sec_nr))
+               return false;
+       memblk = my_find_memory_block(__nr_to_section(sec_nr));
+       if (!memblk || my_is_memblock_offlined(memblk))
+               return false;
+       return true;
+}
+
+%}
+
+function get_pfn (val:long) %{
+  unsigned long pfn;
+  unsigned long max_pfn = *(unsigned long *)$MAXPFN_ADDR;
+  struct pglist_data *pgdat;
+  _stp_printf("maxpfn 0x%lx\n", max_pfn);
+  for_each_online_pgdat(pgdat) {
+    _stp_printf("  %lx\t%lx\t%lx\t%lx\n", pgdat,
+      pgdat->node_start_pfn,
+      pgdat->node_present_pages,
+      pgdat->node_spanned_pages);
+  }
+
+  for (pfn = 0; pfn < max_pfn; pfn += 512*64) {
+    struct page *page = pfn_to_page(pfn);
+    if (valid_mem_section(pfn_to_section_nr(pfn)))
+      _stp_printf("  pfn:%lx, nid:%lx\n", pfn, page_to_nid(page));
+  }
+%}
+
+probe begin {
+    printf("--- %lx %lx\n", $MAXPFN_ADDR, ptr_deref($MAXPFN_ADDR));
+    get_pfn(0);
+    exit();
+}
+EOF

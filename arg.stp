@@ -1,0 +1,27 @@
+# mapping between function's arguments and registeres
+# %rdi, %rsi, %rdx, %rcx, %r8, %r9
+
+function call_kernel_func1:long (func:long, a1:long) %{
+  STAP_RETVALUE = (long)__call_kernel_func1(STAP_ARG_func, STAP_ARG_a1);
+%}
+function call_kernel_func2:long (func:long, a1:long, a2:long) %{
+  STAP_RETVALUE = (long)__call_kernel_func2(STAP_ARG_func, STAP_ARG_a1, STAP_ARG_a2);
+%}
+function call_kernel_func3:long (func:long, a1:long, a2:long, a3:long) %{
+  STAP_RETVALUE = (long)__call_kernel_func3(STAP_ARG_func, STAP_ARG_a1, STAP_ARG_a2, STAP_ARG_a3);
+%}
+function call_kernel_func4:long (func:long, a1:long, a2:long, a3:long, a4:long) %{
+  STAP_RETVALUE = (long)__call_kernel_func4(STAP_ARG_func, STAP_ARG_a1, STAP_ARG_a2, STAP_ARG_a3, STAP_ARG_a4);
+%}
+function call_kernel_func5:long (func:long, a1:long, a2:long, a3:long, a4:long, a5:long) %{
+  STAP_RETVALUE = (long)__call_kernel_func5(STAP_ARG_func, STAP_ARG_a1, STAP_ARG_a2, STAP_ARG_a3, STAP_ARG_a4, STAP_ARG_a5);
+%}
+function call_kernel_func6:long (func:long, a1:long, a2:long, a3:long, a4:long, a5:long, a6:long) %{
+  STAP_RETVALUE = (long)__call_kernel_func6(STAP_ARG_func, STAP_ARG_a1, STAP_ARG_a2, STAP_ARG_a3, STAP_ARG_a4, STAP_ARG_a5, STAP_ARG_a6);
+%}
+function arg1:long () { return register("rdi"); }
+function arg2:long () { return register("rsi"); }
+function arg3:long () { return register("rdx"); }
+function arg4:long () { return register("rcx"); }
+function arg5:long () { return register("r8"); }
+function arg6:long () { return register("r9"); }

@@ -1,0 +1,25 @@
+# SIMPLE: handle_mm_fault 1
+# SIMPLE: # __do_page_fault
+
+cat <<EOF
+
+global gmapping, kpagecache_path, ptep, node_data;
+global glmm, glpud, gladdr;
+global migind1, migind2;
+
+probe begin {
+    # get_all_hugepages(0x$HSTATES_ADDR);
+    # show_all_hugepages(0);
+    glmm = 0;
+}
+
+probe kernel.function("zap_pte_range") {
+    if (execname() == "tmp_hwpoison") {
+        if (arg4() == 0x700000000000) {
+             mm = vma_mm(arg2());
+             $pb; printf("\n");
+             show_pgtable(mm, 0);
+        }
+    }
+}
+EOF
