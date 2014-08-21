@@ -1,3 +1,5 @@
+cat <<EOF
+
 function get_huge_entry:long (mm:long, addr:long) %{
   struct mm_struct *mm = (struct mm_struct *)STAP_ARG_mm;
   unsigned long address = (unsigned long)STAP_ARG_addr;
@@ -87,3 +89,5 @@ function huge_pte_offset:long (mm:long, addr:long) %{
   unsigned long addr = (unsigned long)STAP_ARG_addr;
   STAP_RETVALUE = (long)huge_pte_offset(mm, addr);
 %}
+
+EOF

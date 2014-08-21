@@ -1,3 +1,5 @@
+cat <<EOF
+
 function dcount:long (val:long) %{
     struct dentry *de = ((struct dentry *)STAP_ARG_val);
     if (de)
@@ -13,3 +15,5 @@ function path_dentry:long (val:long) %{
     else
         STAP_RETVALUE = (unsigned long)0;
 %}
+
+EOF

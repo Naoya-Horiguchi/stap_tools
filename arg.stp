@@ -1,3 +1,5 @@
+cat <<EOF
+
 # mapping between function's arguments and registeres
 # %rdi, %rsi, %rdx, %rcx, %r8, %r9
 
@@ -25,3 +27,5 @@ function arg3:long () { return register("rdx"); }
 function arg4:long () { return register("rcx"); }
 function arg5:long () { return register("r8"); }
 function arg6:long () { return register("r9"); }
+
+EOF

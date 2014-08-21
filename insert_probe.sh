@@ -55,20 +55,26 @@ cat <<EOF > ${TMPF}.stp
 EOF
 
 # routines
-cat $(dirname $BASH_SOURCE)/gru_base.stp       >> ${TMPF}.stp
-cat $(dirname $BASH_SOURCE)/arg.stp            >> ${TMPF}.stp
-cat $(dirname $BASH_SOURCE)/mm_common.stp      >> ${TMPF}.stp
-cat $(dirname $BASH_SOURCE)/hugetlb.stp        >> ${TMPF}.stp
-cat $(dirname $BASH_SOURCE)/fs_common.stp      >> ${TMPF}.stp
-source $(dirname $BASH_SOURCE)/member_deref.sh >> ${TMPF}.stp
 source $(dirname $BASH_SOURCE)/ksyms.sh
+source $(dirname $BASH_SOURCE)/func_pointer.sh
 
 cat $RECIPE | grep "^# SIMPLE:" | sed -e 's/^# SIMPLE://' | \
     while read line ; do
     echo "$line" | bash $(dirname $BASH_SOURCE)/simple_probe.sh >> ${TMPF}.stp
 done
 
-. $RECIPE >> ${TMPF}.stp
+. $RECIPE $@ >> ${TMPF}.stp
+if [ $? -ne 0 ] ; then
+    echo "Failed to read/execute $RECIPE. abort." >&2
+    exit 1
+fi
+
+source $(dirname $BASH_SOURCE)/gru_base.stp       >> ${TMPF}.stp
+source $(dirname $BASH_SOURCE)/arg.stp            >> ${TMPF}.stp
+source $(dirname $BASH_SOURCE)/mm_common.stp      >> ${TMPF}.stp
+source $(dirname $BASH_SOURCE)/hugetlb.stp        >> ${TMPF}.stp
+source $(dirname $BASH_SOURCE)/fs_common.stp      >> ${TMPF}.stp
+source $(dirname $BASH_SOURCE)/member_deref.sh    >> ${TMPF}.stp
 
 [ "$SHOW" ] && less ${TMPF}.stp
 $STAP ${TMPF}.stp -g ${VERBOSE} ${OFILE} -t -w --suppress-time-limits -DMAXACTION=10000 # -D MAXSKIPPED=

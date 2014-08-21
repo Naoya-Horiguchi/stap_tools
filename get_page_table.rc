@@ -1,0 +1,193 @@
+# SIMPLE: # hugetlb_fault 3
+
+if [ $# -lt 1 ] ; then
+    echo "$BASH_SOURCE: No argument given." >&2
+    exit 1
+fi
+PID=$1
+
+STARTADDR=0
+ENDADDR=0xffffffffffffffff
+[ $# -ge 2 ] && STARTADDR=$2
+[ $# -ge 3 ] && ENDADDR=$3
+
+echo '%{
+#include <linux/hugetlb.h>
+#include "../../../arch/x86/include/asm/pgtable.h"
+#include "../../../include/asm-generic/pgtable.h"
+#include "../../../arch/x86/include/asm/hugetlb.h"
+%}'
+
+define_kernel_internal_function 'unsigned long hugetlb_entry_end(struct hstate *h, unsigned long addr, unsigned long end)'
+
+cat <<EOF
+
+%{
+
+struct walk_control {
+    unsigned long addr;
+    pte_t *pte;
+    pmd_t *pmd;
+    pud_t *pud;
+    pgd_t *pgd;    
+    struct vm_area_struct *vma;
+};
+
+void walk_pgtable_dump(struct walk_control *wc) {
+    _stp_printf("%016lx %016lx %016lx %016lx %016lx\n",
+        wc->addr,
+        (unsigned long)wc->pgd ? *(unsigned long *)(wc->pgd) : 0,
+        (unsigned long)wc->pud ? *(unsigned long *)(wc->pud) : 0,
+        (unsigned long)wc->pmd ? *(unsigned long *)(wc->pmd) : 0,
+        (unsigned long)wc->pte ? *(unsigned long *)(wc->pte) : 0
+    );
+}
+
+void walk_pgtable_hole_range(struct walk_control *wc,
+                        unsigned long start, unsigned long end) {
+    ;
+}
+
+void walk_pgtable_pte_range(struct walk_control *wc, pmd_t *pmd,
+                        unsigned long start, unsigned long end) {
+    unsigned long addr = start, next;
+    spinlock_t *ptl;
+    pte_t *ptep;
+
+    ptep = pte_offset_map_lock(wc->vma->vm_mm, pmd, addr, &ptl);
+    do {
+        pte_t pte = *ptep;
+        pgoff_t pgoff;
+
+        wc->pte = ptep;
+        wc->addr = addr;
+        next = addr + PAGE_SIZE;
+        if (pte_none(pte))
+            walk_pgtable_hole_range(wc, addr, next);
+        else
+            walk_pgtable_dump(wc);
+    } while (ptep++, addr = next, addr != end);
+    pte_unmap_unlock(ptep - 1, ptl);
+}
+
+void walk_pgtable_pmd_range(struct walk_control *wc, pud_t *pud,
+                        unsigned long start, unsigned long end) {
+    unsigned long addr = start, next;
+    pmd_t *pmd;
+
+    pmd = pmd_offset(pud, addr);
+    do {
+        wc->pmd = pmd;
+        wc->addr = addr;
+        next = pmd_addr_end(addr, end);
+        if (pmd_trans_huge(*pmd)) {
+            walk_pgtable_dump(wc);
+            continue;
+        }
+        if (pmd_none(*pmd) || pmd_trans_huge(*pmd))
+            walk_pgtable_hole_range(wc, addr, next);
+        else
+            walk_pgtable_pte_range(wc, pmd, addr, next);
+    } while (pmd++, addr = next, addr != end);
+}
+
+void walk_pgtable_pud_range(struct walk_control *wc, pgd_t *pgd,
+                        unsigned long start, unsigned long end) {
+    unsigned long addr = start, next;
+    pud_t *pud;
+
+    pud = pud_offset(pgd, addr);
+    do {
+        wc->pud = pud;
+        wc->addr = addr;
+        next = pud_addr_end(addr, end);
+        if (pud_none(*pud))
+            walk_pgtable_hole_range(wc, addr, next);
+        else
+            walk_pgtable_pmd_range(wc, pud, addr, next);
+    } while (pud++, addr = next, addr != end);
+}
+
+void walk_pgtable_pgd_range(struct walk_control *wc,
+                        unsigned long start, unsigned long end) {
+    unsigned long addr = start, next;
+    pgd_t *pgd;
+
+    pgd = pgd_offset(wc->vma->vm_mm, addr);
+    do {
+        wc->pgd = pgd;
+        wc->addr = addr;
+        next = pgd_addr_end(addr, end);
+        if (pgd_none(*pgd))
+            walk_pgtable_hole_range(wc, addr, next);
+        else
+            walk_pgtable_pud_range(wc, pgd, addr, next);
+    } while (pgd++, addr = next, addr != end);
+}
+
+void walk_pgtable_hugetlb_range(struct walk_control *wc,
+                        unsigned long start, unsigned long end) {
+    struct vm_area_struct *vma = wc->vma;
+    struct hstate *h = hstate_vma(vma);
+    unsigned long addr = start, next;
+    unsigned long hmask = huge_page_mask(h);
+    pte_t *pte;
+
+    do {
+        next = _stp_hugetlb_entry_end(h, addr, end);
+        pte = huge_pte_offset(vma->vm_mm, addr & hmask);
+        wc->pte = pte;
+        wc->addr = addr;
+        if (pte && huge_pte_none(*pte))
+            walk_pgtable_dump(wc);
+    } while (addr = next, addr != end);
+}
+
+void walk_pgtable_range(struct walk_control *wc,
+                        unsigned long start, unsigned long end) {
+    if (is_vm_hugetlb_page(wc->vma))
+         walk_pgtable_hugetlb_range(wc, start, end);
+    else
+         walk_pgtable_pgd_range(wc, start, end);
+}
+%}
+
+function walk_pgtable:string (task:long, start:long, end:long) %{
+    struct task_struct *task = (struct task_struct *)STAP_ARG_task;
+    unsigned long start = (unsigned long)STAP_ARG_start;
+    unsigned long end = (unsigned long)STAP_ARG_end;
+    struct mm_struct *mm = task->mm;
+    struct vm_area_struct *vma;
+    struct walk_control wc = {};
+    unsigned long next;
+
+    down_read(&mm->mmap_sem);
+    VM_BUG_ON(!rwsem_is_locked(&mm->mmap_sem));
+
+    vma = find_vma(mm, start);
+    do {
+        if (!vma) { /* after the last vma */
+            wc.vma = NULL;
+            next = end;
+        } else if (start < vma->vm_start) { /* outside vma */
+            wc.vma = NULL;
+            next = min(end, vma->vm_start);
+        } else { /* inside vma */
+            wc.vma = vma;
+            next = min(end, vma->vm_end);
+            vma = vma->vm_next;
+        }
+        if (wc.vma)
+            walk_pgtable_range(&wc, start, next);
+    } while (start = next, start < end);
+    up_read(&mm->mmap_sem);
+%}
+
+probe begin {
+    printf("--- start ---\n");
+    task = pid2task($PID);
+    printf("pid:%d, task:%lx\n", $PID, task);
+    walk_pgtable(task, $STARTADDR, $ENDADDR);
+    exit();
+}
+EOF

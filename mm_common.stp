@@ -1,3 +1,24 @@
+echo "%{
+#include <linux/memblock.h>
+%}"
+
+cat <<EOF
+
+%{
+
+static bool valid_mem_section(unsigned long sec_nr)
+{
+       struct memory_block *memblk;
+       if (!present_section_nr(sec_nr))
+               return false;
+       memblk = find_memory_block(__nr_to_section(sec_nr));
+       if (!memblk || is_memblock_offlined(memblk))
+               return false;
+       return true;
+}
+
+%}
+
 function pfn_to_page:long (val:long) %{
     STAP_RETVALUE = (long)pfn_to_page((unsigned long)STAP_ARG_val);
 %}
@@ -52,6 +73,25 @@ function show_pgdats () %{
     }
 %}
 
+function get_memblocks (val:long) %{
+    unsigned long pfn;
+    unsigned long max_pfn = *(unsigned long *)$MAXPFN_ADDR;
+    struct pglist_data *pgdat;
+    _stp_printf("maxpfn 0x%lx\n", max_pfn);
+    for_each_online_pgdat(pgdat) {
+        _stp_printf("  %lx\t%lx\t%lx\t%lx\n", pgdat,
+            pgdat->node_start_pfn,
+            pgdat->node_present_pages,
+            pgdat->node_spanned_pages);
+    }
+  
+    for (pfn = 0; pfn < max_pfn; pfn += 512*64) {
+        struct page *page = pfn_to_page(pfn);
+        if (valid_mem_section(pfn_to_section_nr(pfn)))
+            _stp_printf("  pfn:%lx, nid:%lx\n", pfn, page_to_nid(page));
+    }
+%}
+
 function show_pgtable (mm:long, index:long) %{
     struct mm_struct *mm = (struct mm_struct *)STAP_ARG_mm;
     unsigned long index = (unsigned long)STAP_ARG_index;
@@ -101,3 +141,5 @@ function pud_to_pmd (mm:long, pud:long, addr:long) %{
 out3:
     _stp_printf("\n");
 %}
+
+EOF

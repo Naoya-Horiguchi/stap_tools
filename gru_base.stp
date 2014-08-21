@@ -1,3 +1,5 @@
+cat <<EOF
+
 %{
 #include <linux/kernel.h>
 #include <linux/mm.h>
@@ -90,3 +92,5 @@ struct pglist_data *next_online_pgdat(struct pglist_data *pgdat)
 }
 
 %}
+
+EOF

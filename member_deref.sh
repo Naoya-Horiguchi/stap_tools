@@ -43,4 +43,5 @@ pgdat_present pglist_data      ->node_present_pages
 pgdat_spanned pglist_data      ->node_spanned_pages
 pgdat_nodeid  pglist_data      ->node_id
 ptn_addr      page_to_node     ->addr
+task_mm       task_struct      ->mm
 EOF
